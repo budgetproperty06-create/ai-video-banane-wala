@@ -13,7 +13,6 @@ jobs:
           cat > make.py << 'PYEOF'
           import urllib.request, urllib.parse, subprocess, time, os, random
 
-          # YAHAN apne prompts likho — har line = 1 alag video (max ~10-12 ek run mein)
           prompts = [
               "cinematic drone shot flying over misty mountain peaks at sunrise, ultra realistic",
               "close up of lion face in golden savanna light, cinematic photography",
@@ -25,10 +24,9 @@ jobs:
               "northern lights dancing over snowy mountain lake, reflections, cinematic",
           ]
 
-          LAMBAI = 8   # har video kitne second ki ho (8 = best)
+          LAMBAI = 8
           os.makedirs("output", exist_ok=True)
 
-          # Har video pe alag camera motion — yahi "real AI" feel deta hai
           effects = [
               "zoompan=z='min(zoom+0.0012,1.6)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
               "zoompan=z='if(eq(on,0),1.5,max(1.0,zoom-0.0012))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
@@ -38,26 +36,39 @@ jobs:
           ]
 
           for i, prompt in enumerate(prompts, 1):
-              print(f"=== Video {i}/{len(prompts)}: {prompt}")
+              print(f"=== Video {i}/{len(prompts)}: {prompt}", flush=True)
               url = ("https://image.pollinations.ai/prompt/"
                      + urllib.parse.quote(prompt)
                      + "?width=1080&height=1920&nologo=true&seed=" + str(i * 13))
               img = f"img{i}.png"
-              for attempt in range(4):
+              ok = False
+              for attempt in range(6):
                   try:
-                      urllib.request.urlretrieve(url, img)
-                      if os.path.getsize(img) > 20000:
+                      with urllib.request.urlopen(url, timeout=120) as r:
+                          data = r.read()
+                      if len(data) > 20000:
+                          with open(img, "wb") as f:
+                              f.write(data)
+                          ok = True
                           break
-                  except Exception:
-                      time.sleep(8)
-              effect = random.Random(i).choice(effects)
-              subprocess.run([
-                  "ffmpeg", "-y", "-loop", "1", "-i", img,
-                  "-vf", effect + ":d=240:s=1080x1920:fps=30,format=yuv420p",
-                  "-t", str(LAMBAI), "-c:v", "libx264", "-crf", "20",
-                  f"output/ai-video-{i}.mp4"
-              ], check=True)
-          print("=== SAB VIDEOS BAN GAYI! ===")
+                  except Exception as e:
+                      print(f"  try {attempt+1} fail, 15 sec wait...", flush=True)
+                      time.sleep(15)
+              if not ok:
+                  print(f"  SKIP: image nahi mil payi, agli video dekhte hain", flush=True)
+                  continue
+              try:
+                  effect = random.Random(i).choice(effects)
+                  subprocess.run([
+                      "ffmpeg", "-y", "-loop", "1", "-i", img,
+                      "-vf", effect + ":d=240:s=1080x1920:fps=30,format=yuv420p",
+                      "-t", str(LAMBAI), "-c:v", "libx264", "-crf", "20",
+                      f"output/ai-video-{i}.mp4"
+                  ], check=True)
+                  print(f"  DONE: ai-video-{i}.mp4", flush=True)
+              except Exception:
+                  print(f"  SKIP: ffmpeg fail, agli video", flush=True)
+          print("=== KAAM KHATAM ===", flush=True)
           PYEOF
           python3 make.py
 
