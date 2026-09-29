@@ -1,0 +1,68 @@
+name: AI Style Videos
+on:
+  workflow_dispatch:
+jobs:
+  banao:
+    runs-on: ubuntu-latest
+    steps:
+      - name: FFmpeg install karo
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: AI videos banao
+        run: |
+          cat > make.py << 'PYEOF'
+          import urllib.request, urllib.parse, subprocess, time, os, random
+
+          # YAHAN apne prompts likho — har line = 1 alag video (max ~10-12 ek run mein)
+          prompts = [
+              "cinematic drone shot flying over misty mountain peaks at sunrise, ultra realistic",
+              "close up of lion face in golden savanna light, cinematic photography",
+              "cyberpunk street in heavy rain, neon reflections on wet road, cinematic",
+              "astronaut walking on alien planet with two moons, epic scale, cinematic",
+              "massive waterfall in lush green jungle, sun rays through mist, ultra realistic",
+              "great white shark swimming in deep blue ocean, sun rays from surface",
+              "ancient temple covered in vines, god rays through fog, mystical, epic",
+              "northern lights dancing over snowy mountain lake, reflections, cinematic",
+          ]
+
+          LAMBAI = 8   # har video kitne second ki ho (8 = best)
+          os.makedirs("output", exist_ok=True)
+
+          # Har video pe alag camera motion — yahi "real AI" feel deta hai
+          effects = [
+              "zoompan=z='min(zoom+0.0012,1.6)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+              "zoompan=z='if(eq(on,0),1.5,max(1.0,zoom-0.0012))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+              "zoompan=z='1.35':x='(iw-iw/zoom)*on/239':y='(ih-ih/zoom)/2'",
+              "zoompan=z='1.35':x='(iw-iw/zoom)*(1-on/239)':y='(ih-ih/zoom)/2'",
+              "zoompan=z='1.35':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)*on/239'",
+          ]
+
+          for i, prompt in enumerate(prompts, 1):
+              print(f"=== Video {i}/{len(prompts)}: {prompt}")
+              url = ("https://image.pollinations.ai/prompt/"
+                     + urllib.parse.quote(prompt)
+                     + "?width=1080&height=1920&nologo=true&seed=" + str(i * 13))
+              img = f"img{i}.png"
+              for attempt in range(4):
+                  try:
+                      urllib.request.urlretrieve(url, img)
+                      if os.path.getsize(img) > 20000:
+                          break
+                  except Exception:
+                      time.sleep(8)
+              effect = random.Random(i).choice(effects)
+              subprocess.run([
+                  "ffmpeg", "-y", "-loop", "1", "-i", img,
+                  "-vf", effect + ":d=240:s=1080x1920:fps=30,format=yuv420p",
+                  "-t", str(LAMBAI), "-c:v", "libx264", "-crf", "20",
+                  f"output/ai-video-{i}.mp4"
+              ], check=True)
+          print("=== SAB VIDEOS BAN GAYI! ===")
+          PYEOF
+          python3 make.py
+
+      - name: Videos download ke liye taiyaar karo
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-videos
+          path: output/
